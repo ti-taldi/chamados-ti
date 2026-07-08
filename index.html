@@ -319,9 +319,11 @@ const ls={
   del:(k)=>localStorage.removeItem(k),
 };
 // Carrega dados do servidor e popula localStorage (para acesso online multi-usuário)
+// Carrega dados do servidor e popula localStorage (para acesso online multi-usuário)
 async function loadFromServer(){
   try{
-    const r=await fetch("/api/db");
+    // O '?t=' + Date.now() impede que o navegador use cache na guia anônima
+    const r=await fetch("/api/db?t=" + Date.now(), { cache: "no-store" });
     if(!r.ok)return;
     const db=await r.json();
     ["ti_users","ti_tickets","ti_roles","ti_assets","ti_seq"].forEach(k=>{
