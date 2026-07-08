@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: chamados-ti
+    env: node
+    region: oregon
+    plan: free
+    buildCommand: npm install && node build.js
+    startCommand: node server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+    disk:
+      name: dados
+      mountPath: /var/data
+      sizeGB: 1

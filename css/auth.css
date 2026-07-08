@@ -1,0 +1,82 @@
+.auth-screen {
+  position: fixed; inset: 0; z-index: 200;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--navy);
+}
+.auth-card {
+  background: var(--white); border-radius: 16px;
+  padding: 36px 40px; width: 100%; max-width: 420px;
+  box-shadow: 0 20px 60px rgba(0,0,0,.35);
+}
+.auth-logo { text-align: center; margin-bottom: 28px; }
+.auth-logo-icon {
+  width: 52px; height: 52px; border-radius: 12px;
+  background: var(--navy); display: inline-flex;
+  align-items: center; justify-content: center;
+  color: white; font-size: 26px; margin-bottom: 10px;
+}
+.auth-logo h1 { font-size: 18px; font-weight: 600; }
+.auth-logo p  { font-size: 13px; color: var(--t2); margin-top: 2px; }
+
+.auth-field   { margin-bottom: 16px; }
+.auth-label   { display: block; font-size: 13px; font-weight: 500; color: var(--t2); margin-bottom: 6px; }
+.auth-input   {
+  width: 100%; padding: 10px 12px;
+  font-family: 'IBM Plex Sans', sans-serif; font-size: 14px;
+  border: 1px solid var(--border); border-radius: var(--r);
+  background: var(--white); color: var(--text); outline: none;
+  transition: border-color .15s, box-shadow .15s;
+}
+.auth-input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(2,132,199,.1); }
+
+.remember-row {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 13px; color: var(--t2); cursor: pointer; user-select: none;
+}
+.remember-row input[type="checkbox"] {
+  width: 16px; height: 16px; cursor: pointer;
+  accent-color: var(--navy);
+}
+
+.auth-btn {
+  width: 100%; padding: 11px; background: var(--navy); color: white;
+  border: none; border-radius: var(--r);
+  font-size: 14px; font-weight: 500;
+  font-family: 'IBM Plex Sans', sans-serif;
+  cursor: pointer; transition: background .15s;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  margin-top: 4px;
+}
+.auth-btn:hover    { background: var(--navy2); }
+.auth-btn:disabled { background: var(--bg); color: var(--t3); cursor: not-allowed; }
+
+.auth-switch { text-align: center; margin-top: 20px; font-size: 13px; color: var(--t2); }
+.auth-switch a { color: var(--blue); cursor: pointer; font-weight: 500; text-decoration: none; }
+.auth-switch a:hover { text-decoration: underline; }
+
+.auth-error {
+  background: var(--red-bg); color: var(--red-t);
+  font-size: 13px; padding: 10px 12px; border-radius: var(--r);
+  margin-bottom: 14px; display: flex; align-items: center; gap: 7px;
+}
+.auth-hint {
+  background: var(--blue-bg); color: var(--blue-t);
+  font-size: 12px; padding: 10px 12px;
+  border-radius: var(--r); margin-bottom: 16px; line-height: 1.5;
+}
+
+.status-screen {
+  position: fixed; inset: 0; z-index: 200;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--navy);
+}
+.status-card {
+  background: var(--white); border-radius: 16px; padding: 40px;
+  width: 100%; max-width: 400px; text-align: center;
+  box-shadow: 0 20px 60px rgba(0,0,0,.35);
+}
+.status-icon {
+  width: 64px; height: 64px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 auto 18px; font-size: 28px;
+}

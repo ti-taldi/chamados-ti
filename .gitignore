@@ -1,0 +1,6 @@
+node_modules/
+.compiled.html
+email-config.json
+db.json
+*.log
+.env
