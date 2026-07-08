@@ -343,11 +343,16 @@ const genTID=()=>{const n=parseInt(ls.get("ti_seq",0))+1;ls.set("ti_seq",n);retu
 
 function initData(){
   let roles=ls.get("ti_roles",[]);
-  if(!roles.length){roles=[...SYS_ROLES];ls.set("ti_roles",roles);}
+  if(!roles.length){
+    roles=[...SYS_ROLES];
+    // CORREÇÃO: Usar localStorage diretamente para não sobrescrever o DB do servidor
+    localStorage.setItem("ti_roles", JSON.stringify(roles)); 
+  }
   let users=ls.get("ti_users",[]);
   if(!users.length){
     users=[{id:"admin-1",name:"Administrador",email:"admin@ti.local",password:enc("admin123"),role:"admin",roleId:"role-admin",company:"",createdAt:Date.now()}];
-    ls.set("ti_users",users);
+    // CORREÇÃO: Usar localStorage diretamente para não sobrescrever o DB do servidor
+    localStorage.setItem("ti_users", JSON.stringify(users));
   }
   return {users,roles};
 }
