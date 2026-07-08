@@ -266,8 +266,7 @@ select.sf:focus{border-color:var(--blue)}
 </div>
 <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-<script type="text/babel">
-const {useS<script>
+<script>
 const {
   useState,
   useEffect
@@ -465,7 +464,7 @@ const ss = {
   },
   set: (k, v) => sessionStorage.setItem(k, JSON.stringify(v)),
   del: k => sessionStorage.removeItem(k)
-};
+}
 const enc = p => {
   try {
     return btoa(unescape(encodeURIComponent(p)));
@@ -774,8 +773,8 @@ function RegisterScreen({
     style: {
       width: "auto",
       display: "inline-flex"
-    },
-    onClick: onGoLogin
+    }
+  }, onClick: onGoLogin
   }, /*#__PURE__*/React.createElement("i", {
     className: "ti ti-arrow-left"
   }), " Voltar ao login")));
@@ -3445,8 +3444,8 @@ function EmailConfig({
     style: {
       padding: "7px 14px",
       fontSize: 12
-    },
-    onClick: runDiag,
+    }
+  }, onClick: runDiag,
     disabled: diagRunning
   }, /*#__PURE__*/React.createElement("i", {
     className: "ti ti-refresh"
