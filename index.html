@@ -1542,8 +1542,9 @@ function App() {
 
   // =========================================================
 
+ if (!isReady) return null;
+
   const showToast = (msg, icon = "ti-check", color = "var(--green)") => {
-    setToast({ msg, icon, color });
     setTimeout(() => setToast(null), 3000);
   };
 
