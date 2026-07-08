@@ -1470,20 +1470,16 @@ function EmailConfig({users,roles,onClose}){
 
 // ── APP ────────────────────────────────────────────────────
 function App() {
-  const init = initData();
-  const [users, setUsers] = useState(() => ls.get("ti_users", init.users));
-  const [roles, setRoles] = useState(() => ls.get("ti_roles", init.roles));
-  const [tickets, setTickets] = useState(() => ls.get("ti_tickets", []));
-  const [assets, setAssets] = useState(() => ls.get("ti_assets", []));
+  const [isReady, setIsReady] = useState(false); // NOVO: Trava a tela
+  const [users, setUsers] = useState([]);
+  const [roles, setRoles] = useState([]);
+  const [tickets, setTickets] = useState([]);
+  const [assets, setAssets] = useState([]);
   const [session, setSession] = useState(() => resolveSession());
   const [authView, setAuthView] = useState("login");
   const [view, setView] = useState("form");
   const [toast, setToast] = useState(null);
   const [showEmailCfg, setShowEmailCfg] = useState(false);
-
-  // =========================================================
-  // CORREÇÃO: Todos os "useEffect" no topo antes de qualquer "return"
-  // =========================================================
 
   useEffect(() => {
     loadFromServer().then(() => {
@@ -1493,6 +1489,7 @@ function App() {
       setTickets(ls.get("ti_tickets", []));
       setAssets(ls.get("ti_assets", []));
     }).finally(() => {
+      setIsReady(true); // Libera o app APÓS o banco carregar
       const el = document.getElementById("loading-screen");
       if (el) {
         el.style.transition = "opacity .3s";
