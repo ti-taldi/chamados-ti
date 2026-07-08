@@ -15,6 +15,11 @@ const COMPILED    = path.join(__dirname, ".compiled.html");
 const SOURCE      = path.join(__dirname, "index.html");
 
 // ── Database helpers ──────────────────────────────────────────
+// Garante que a pasta de dados existe
+if (!fs.existsSync(DATA_DIR)) {
+  try { fs.mkdirSync(DATA_DIR, { recursive: true }); }
+  catch(e) { console.warn("Não foi possível criar DATA_DIR, usando pasta do projeto:", e.message); }
+}
 function readDB() {
   try { return JSON.parse(fs.readFileSync(DB_FILE,"utf8")); }
   catch { return {ti_users:[],ti_tickets:[],ti_roles:[],ti_assets:[],ti_seq:0}; }
