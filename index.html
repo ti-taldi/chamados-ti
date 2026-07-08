@@ -331,17 +331,55 @@ async function loadFromServer(){
     });
   }catch(e){console.warn("Offline ou servidor indisponível:",e.message);}
 }
+// ── STORAGE & CONEXÃO COM SERVIDOR ─────────────────────────
 const ss={
   get:(k,d)=>{try{const v=sessionStorage.getItem(k);return v!==null?JSON.parse(v):d;}catch{return d;}},
   set:(k,v)=>sessionStorage.setItem(k,JSON.stringify(v)),
   del:(k)=>sessionStorage.removeItem(k),
 };
+const ls={
+  get:(k,d)=>{try{const v=localStorage.getItem(k);return v!==null?JSON.parse(v):d;}catch{return d;}},
+  set:(k,v)=>localStorage.setItem(k,JSON.stringify(v)), // Apenas salva a sessão localmente
+  del:(k)=>localStorage.removeItem(k),
+};
+
 const enc=p=>{try{return btoa(unescape(encodeURIComponent(p)));}catch{return p;}};
 const dec=p=>{try{return decodeURIComponent(escape(atob(p)));}catch{return p;}};
 const genUID=()=>"u-"+Date.now()+Math.random().toString(36).slice(2,6);
 const genRID=()=>"r-"+Date.now()+Math.random().toString(36).slice(2,6);
 const genAID=()=>"a-"+Date.now()+Math.random().toString(36).slice(2,5);
-const genTID=()=>{const n=parseInt(ls.get("ti_seq",0))+1;ls.set("ti_seq",n);return "TI-"+String(n).padStart(4,"0");};
+// ID de chamado mais seguro (sem depender de cache)
+const genTID=()=>"TI-" + Math.floor(Math.random() * 10000).toString().padStart(4, "0");
+
+function resolveSession(){
+  const ps=ls.get("ti_persist",null);
+  if(ps&&ps.expiresAt&&Date.now()<ps.expiresAt)return ps;
+  ls.del("ti_persist");
+  return ss.get("ti_session",null);
+}
+
+// Única via de comunicação com o Raspberry Pi para salvar dados
+const saveToDB = (data) => {
+  fetch("/api/db", { 
+    method: "POST", 
+    headers: { "Content-Type": "application/json" }, 
+    body: JSON.stringify(data) 
+  }).catch(err => console.error("Erro ao salvar no servidor:", err));
+};
+
+// ── UTILS ──────────────────────────────────────────────────
+const fmtDate=ts=>new Date(ts).toLocaleDateString("pt-BR");
+const fmtDl=s=>{if(!s)return null;const[y,m,d]=s.split("-");return`${d}/${m}/${y}`;};
+const isOverdue=(dl,st)=>{
+  if(!dl||st==="concluido")return false;
+  const t=new Date();t.setHours(0,0,0,0);
+  return new Date(dl+"T00:00:00")<t;
+};
+const getPerms=(session,roles)=>{
+  if(session.role==="admin")return SCREENS.map(s=>s.id);
+  const r=roles.find(r=>r.id===session.roleId)||roles.find(r=>r.id==="role-user");
+  return r?r.permissions:["form","mine"];
+};
 
 function initData(){
   let roles=ls.get("ti_roles",[]);
@@ -1468,64 +1506,43 @@ function EmailConfig({users,roles,onClose}){
   );
 }
 
-// ── APP ────────────────────────────────────────────────────
+/// ── APP ────────────────────────────────────────────────────
 function App() {
-  // NOVO: A variável que tranca o aplicativo
-  const [isReady, setIsReady] = useState(false); 
-  
+  const [isReady, setIsReady] = useState(false); // Esta é a chave de ouro
   const [users, setUsers] = useState([]);
   const [roles, setRoles] = useState([]);
   const [tickets, setTickets] = useState([]);
   const [assets, setAssets] = useState([]);
+  
   const [session, setSession] = useState(() => resolveSession());
   const [authView, setAuthView] = useState("login");
   const [view, setView] = useState("form");
   const [toast, setToast] = useState(null);
   const [showEmailCfg, setShowEmailCfg] = useState(false);
 
-  // 1. CARREGAMENTO BLINDADO: Puxa a verdade absoluta do servidor ANTES de tudo
+  // 1. CARREGAMENTO BLINDADO: Puxa do Raspberry Pi ANTES de desenhar a tela
   useEffect(() => {
-    // Adiciona o Date.now() para impedir que a aba anônima use cache fantasma
+    // O '?t=Date.now()' força a guia anônima a ignorar caches antigos
     fetch("/api/db?t=" + Date.now(), { cache: "no-store" })
       .then(res => res.json())
       .then(db => {
-        const defaultUsers = [{id:"admin-1",name:"Administrador",email:"admin@ti.local",password:enc("admin123"),role:"admin",roleId:"role-admin",company:"",createdAt:Date.now()}];
-        
-        // Puxa do servidor. Se estiver vazio, usa os padrões.
-        const finalUsers = db.ti_users && db.ti_users.length > 0 ? db.ti_users : defaultUsers;
-        const finalRoles = db.ti_roles && db.ti_roles.length > 0 ? db.ti_roles : SYS_ROLES;
-        
-        setUsers(finalUsers);
-        setRoles(finalRoles);
+        // Alimenta o sistema com as verdades do servidor
+        setUsers(db.ti_users || []);
+        setRoles(db.ti_roles || []);
         setTickets(db.ti_tickets || []);
         setAssets(db.ti_assets || []);
-
-        // Salva uma cópia de segurança silenciosa no cache do navegador
-        localStorage.setItem("ti_users", JSON.stringify(finalUsers));
-        localStorage.setItem("ti_roles", JSON.stringify(finalRoles));
-        localStorage.setItem("ti_tickets", JSON.stringify(db.ti_tickets || []));
-        localStorage.setItem("ti_assets", JSON.stringify(db.ti_assets || []));
+        
+        setIsReady(true); // Libera o app!
+        const el = document.getElementById("loading-screen");
+        if (el) { el.style.opacity = "0"; setTimeout(() => el.remove(), 300); }
       })
       .catch(err => {
-        console.warn("Servidor offline, usando cache local de emergência.");
-        setUsers(ls.get("ti_users", []));
-        setRoles(ls.get("ti_roles", SYS_ROLES));
-        setTickets(ls.get("ti_tickets", []));
-        setAssets(ls.get("ti_assets", []));
-      })
-      .finally(() => {
-        // O BANCO CHEGOU! Libera o aplicativo para renderizar
-        setIsReady(true);
-        const el = document.getElementById("loading-screen");
-        if (el) {
-          el.style.transition = "opacity .3s";
-          el.style.opacity = "0";
-          setTimeout(() => el.remove(), 300);
-        }
+        console.error("Servidor indisponível", err);
+        alert("Erro fatal: Não foi possível conectar ao banco de dados!");
       });
   }, []);
 
-  // 2. Sincroniza mudanças de permissão
+  // 2. Sincroniza sessão se um admin mudar as permissões do usuário logado
   useEffect(() => {
     if (!isReady || !session) return;
     const live = users.find(u => u.id === session.id);
@@ -1559,12 +1576,10 @@ function App() {
     // eslint-disable-next-line
   }, [session?.roleId, session?.role, isReady]);
 
-
   // =========================================================
-  // O SEGREDO ESTÁ AQUI: Se o banco não carregou, trave a tela!
+  // SEGREDO AQUI: O aplicativo trava numa tela em branco se não baixou os dados
   // =========================================================
   if (!isReady) return null;
-
 
   const showToast = (msg, icon = "ti-check", color = "var(--green)") => {
     setToast({ msg, icon, color });
@@ -1584,19 +1599,12 @@ function App() {
       });
       const to = notifUsers.map(u => u.email).filter(Boolean);
       if (!to.length) return;
-      const res = await fetch("/api/send-email", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ to, ticket })
-      });
+      const res = await fetch("/api/send-email", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ to, ticket }) });
       const d = await res.json();
       if (d.skipped) return;
-      if (d.ok) {
-        showToast(`📧 E-mail enviado para ${d.sent} destinatário${d.sent !== 1 ? "s" : ""}!`, "ti-mail", "var(--blue-t)");
-      } else {
-        showToast(`⚠️ Falha no e-mail: ${d.error}`, "ti-alert-circle", "var(--amber-t)");
-      }
-    } catch (e) {
-      console.warn("[E-mail] Erro de rede:", e.message);
-    }
+      if (d.ok) showToast(`📧 E-mail enviado para ${d.sent} destinatário${d.sent !== 1 ? "s" : ""}!`, "ti-mail", "var(--blue-t)");
+      else showToast(`⚠️ Falha no e-mail: ${d.error}`, "ti-alert-circle", "var(--amber-t)");
+    } catch (e) { console.warn("[E-mail] Erro de rede:", e.message); }
   };
 
   const login = u => {
@@ -1618,8 +1626,7 @@ function App() {
   const register = u => {
     const up = [...users, u];
     setUsers(up);
-    // Usa fetch direto para não depender do cache
-    fetch("/api/db", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ti_users: up }) });
+    saveToDB({ ti_users: up });
     setAuthView("login");
   };
 
@@ -1628,7 +1635,7 @@ function App() {
     const t = { id, createdAt: Date.now(), status: "aguardando", deadline: null, adminNotes: "", userId: session.id, userEmail: session.email, ...form };
     const up = [...tickets, t];
     setTickets(up);
-    fetch("/api/db", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ti_tickets: up }) });
+    saveToDB({ ti_tickets: up });
     sendEmailNotif(t);
     sendTicketConfirm(t);
     return id;
@@ -1636,30 +1643,21 @@ function App() {
 
   const sendTicketConfirm = async ticket => {
     if (!ticket.userEmail) return;
-    try {
-      await fetch("/api/send-ticket-confirm", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ticket })
-      });
-    } catch (e) {
-      console.warn("[E-mail] Confirmação:", e.message);
-    }
+    try { await fetch("/api/send-ticket-confirm", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ticket }) }); } 
+    catch (e) { console.warn("[E-mail] Confirmação:", e.message); }
   };
 
   const updateTicket = (id, updates) => {
     const ticket = tickets.find(t => t.id === id);
     const up = tickets.map(t => t.id === id ? { ...t, ...updates, updatedAt: Date.now() } : t);
     setTickets(up);
-    fetch("/api/db", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ti_tickets: up }) });
-    
+    saveToDB({ ti_tickets: up });
     if (ticket && ticket.userEmail) {
       const statusChanged = updates.status && updates.status !== ticket.status;
       const notesChanged = updates.adminNotes !== undefined && updates.adminNotes.trim() !== '' && updates.adminNotes !== ticket.adminNotes;
       if (statusChanged || notesChanged) {
-        fetch("/api/send-ticket-update", {
-          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ticket, updates })
-        }).then(r => r.json()).then(d => {
-          if (d.ok && !d.skipped) showToast("📧 Solicitante notificado por e-mail!", "ti-mail", "var(--green-t)");
-        }).catch(() => {});
+        fetch("/api/send-ticket-update", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ticket, updates }) })
+          .then(r => r.json()).then(d => { if (d.ok && !d.skipped) showToast("📧 Solicitante notificado por e-mail!", "ti-mail", "var(--green-t)"); }).catch(() => {});
       }
     }
   };
@@ -1667,25 +1665,25 @@ function App() {
   const userAction = (id, role) => {
     const up = users.map(u => u.id === id ? { ...u, role } : u);
     setUsers(up);
-    fetch("/api/db", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ti_users: up }) });
+    saveToDB({ ti_users: up });
   };
 
   const deleteUser = id => {
     const up = users.filter(u => u.id !== id);
     setUsers(up);
-    fetch("/api/db", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ti_users: up }) });
+    saveToDB({ ti_users: up });
   };
 
   const changeRole = (uid, rid) => {
     const up = users.map(u => u.id === uid ? { ...u, roleId: rid } : u);
     setUsers(up);
-    fetch("/api/db", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ti_users: up }) });
+    saveToDB({ ti_users: up });
   };
 
   const saveRole = role => {
     const up = roles.find(r => r.id === role.id) ? roles.map(r => r.id === role.id ? role : r) : [...roles, role];
     setRoles(up);
-    fetch("/api/db", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ti_roles: up }) });
+    saveToDB({ ti_roles: up });
   };
 
   const deleteRole = id => {
@@ -1693,19 +1691,19 @@ function App() {
     setUsers(up2);
     const up = roles.filter(r => r.id !== id);
     setRoles(up);
-    fetch("/api/db", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ti_roles: up, ti_users: up2 }) });
+    saveToDB({ ti_roles: up, ti_users: up2 });
   };
 
   const saveAsset = asset => {
     const up = assets.find(a => a.id === asset.id) ? assets.map(a => a.id === asset.id ? asset : a) : [...assets, asset];
     setAssets(up);
-    fetch("/api/db", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ti_assets: up }) });
+    saveToDB({ ti_assets: up });
   };
 
   const deleteAsset = id => {
     const up = assets.filter(a => a.id !== id);
     setAssets(up);
-    fetch("/api/db", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ti_assets: up }) });
+    saveToDB({ ti_assets: up });
   };
 
   const exportData = () => {
@@ -1733,13 +1731,9 @@ function App() {
         setTickets(data.tickets);
         setUsers(merged);
         if (data.assets) setAssets(data.assets);
-        if (data.roles) {
-          const mr = [...SYS_ROLES, ...(data.roles || []).filter(r => !r.isSystem)];
-          setRoles(mr);
-        }
-        fetch("/api/db", { method: "POST", headers: { "Content-Type": "application/json" }, 
-          body: JSON.stringify({ ti_users: merged, ti_tickets: data.tickets, ti_assets: data.assets||[], ti_roles: data.roles? [...SYS_ROLES, ...data.roles.filter(r=>!r.isSystem)] : SYS_ROLES }) 
-        });
+        if (data.roles) setRoles([...SYS_ROLES, ...(data.roles || []).filter(r => !r.isSystem)]);
+        
+        saveToDB({ ti_users: merged, ti_tickets: data.tickets, ti_assets: data.assets||[], ti_roles: data.roles? [...SYS_ROLES, ...data.roles.filter(r=>!r.isSystem)] : SYS_ROLES });
         showToast(`Importado: ${data.tickets.length} chamados, ${merged.length} usuários`);
       } catch {
         showToast("Arquivo inválido", "ti-alert-circle", "var(--red)");
@@ -1749,7 +1743,6 @@ function App() {
     e.target.value = "";
   };
 
-  // RETORNOS CONDICIONAIS
   if (!session) return authView === "login" ? <LoginScreen users={users} onLogin={login} onGoRegister={() => setAuthView("register")} /> : <RegisterScreen users={users} roles={roles} onRegister={register} onGoLogin={() => setAuthView("login")} />;
   if (session.role === "pending") return <PendingScreen session={session} onLogout={logout} />;
   if (session.role === "rejected") return <RejectedScreen session={session} onLogout={logout} />;
