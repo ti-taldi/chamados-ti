@@ -29,10 +29,11 @@ const START = '<script type="text/babel">';
 const END   = "</script>";
 
 const startIdx = html.indexOf(START);
-const endIdx   = html.lastIndexOf(END);
+// Usa indexOf a partir do startIdx em vez de lastIndexOf (muito mais seguro)
+const endIdx   = html.indexOf(END, startIdx);
 
-if(startIdx === -1){
-  console.error("❌ Bloco <script type=\"text/babel\"> não encontrado.");
+if(startIdx === -1 || endIdx === -1){
+  console.error("❌ Bloco <script type=\"text/babel\"> ou fechamento não encontrado.");
   process.exit(1);
 }
 
@@ -46,12 +47,13 @@ try {
   process.exit(1);
 }
 
-const finalHTML = html
-  .replace('<script src="/babel.min.js"></script>\n', '')
-  .replace('<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>\n', '')
-  .slice(0, startIdx)
+// 1. Recorta e costura usando a string original (índices perfeitos)
+let finalHTML = html.slice(0, startIdx)
   + `<script>\n${compiled}\n</script>`
   + html.slice(endIdx + END.length);
+
+// 2. Limpa as tags do babel standalone usando Regex (para pegar qualquer variação)
+finalHTML = finalHTML.replace(/<script[^>]*babel\.min\.js["'][^>]*><\/script>\s*/gi, '');
 
 fs.writeFileSync(DEST, finalHTML, "utf8");
 console.log("✅ Compilado com sucesso! → .compiled.html");
