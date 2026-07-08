@@ -70,11 +70,51 @@ function readBody(req) {
     req.on("error",rej);
   });
 }
+
 function serveIndex(res) {
-  const file = fs.existsSync(COMPILED) ? COMPILED : SOURCE;
-  cors(res); res.writeHead(200,{"Content-Type":"text/html; charset=utf-8","Cache-Control":"no-cache"});
-  res.end(fs.readFileSync(file,"utf8"));
+  cors(res);
+  
+  if (fs.existsSync(COMPILED)) {
+    // Se o arquivo compilado existe, serve normalmente
+    res.writeHead(200, {"Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-cache"});
+    res.end(fs.readFileSync(COMPILED, "utf8"));
+  } else {
+    // Se não existe, BLOQUEIA o SOURCE e exibe uma tela de erro elegante
+    res.writeHead(500, {"Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-cache"});
+    
+    const errorHTML = `
+      <!DOCTYPE html>
+      <html lang="pt-BR">
+      <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Erro de Build - TI Chamados</title>
+          <style>
+              body { background-color: #0f172a; color: #f8fafc; font-family: system-ui, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; text-align: center; padding: 20px; box-sizing: border-box; }
+              .error-box { background-color: #1e293b; padding: 2.5rem; border-radius: 8px; border: 1px solid #ef4444; max-width: 600px; width: 100%; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5); }
+              h1 { color: #ef4444; margin-top: 0; }
+              code { background: #000; padding: 6px 12px; border-radius: 4px; color: #10b981; font-size: 1.2em; font-family: monospace; display: inline-block; margin-top: 10px; }
+              p { line-height: 1.6; color: #cbd5e1; }
+          </style>
+      </head>
+      <body>
+          <div class="error-box">
+              <h1>⚠️ Falha no Build</h1>
+              <p>O arquivo otimizado da aplicação (<strong>.compiled.html</strong>) não foi encontrado no servidor.</p>
+              <p>Como o Raspberry Pi não possui processamento ideal para compilar a interface em tempo real, o carregamento do modo de desenvolvimento foi bloqueado para evitar travamentos.</p>
+              <hr style="border-color: #334155; margin: 1.5rem 0;">
+              <p>Para resolver, acesse o terminal do servidor na pasta do projeto e execute:</p>
+              <code>node build.js</code>
+          </div>
+      </body>
+      </html>
+    `;
+    
+    res.end(errorHTML);
+    console.warn("⚠️ ALERTA: Acesso à interface bloqueado porque .compiled.html não existe. O usuário está vendo a tela de erro. Rode 'node build.js' para corrigir.");
+  }
 }
+
 function readEmailConfig() {
   try { return JSON.parse(fs.readFileSync(CONFIG_FILE,"utf8")); } catch { return {enabled:false}; }
 }
@@ -283,7 +323,7 @@ server.listen(PORT,()=>{
   console.log("╔══════════════════════════════════════╗");
   console.log("║   ✅  Sistema de Chamados TI         ║");
   console.log(`║   🌐  http://localhost:${PORT}           ║`);
-  console.log(ready?"║   ⚡  Versão compilada              ║":"║   ⚠️   Rode: node build.js            ║");
+  console.log(ready?"║   ⚡  Versão compilada               ║":"║   ⚠️   Rode: node build.js             ║");
   console.log("║   Ctrl+C para encerrar               ║");
   console.log("╚══════════════════════════════════════╝");
 });
