@@ -1,15 +1,19 @@
-/**
- * build.js — Compila o JSX para JavaScript puro.
- * Execute: node build.js
- * Depois: node server.js
- */
 const fs   = require("fs");
 const path = require("path");
 
 const SRC  = path.join(__dirname, "index.html");
 const DEST = path.join(__dirname, ".compiled.html");
 
-// ── Carrega Babel Standalone (funciona em Node.js também) ────
+// Se já existe o arquivo compilado e o fonte não mudou, pula
+if(fs.existsSync(DEST)){
+  const cacheTime = fs.statSync(DEST).mtimeMs;
+  const srcTime   = fs.statSync(SRC).mtimeMs;
+  if(cacheTime >= srcTime){
+    console.log("📦 .compiled.html já está atualizado. Pulando compilação.");
+    process.exit(0);
+  }
+}
+
 let Babel;
 try {
   Babel = require("@babel/standalone");
@@ -27,7 +31,7 @@ const END   = "</script>";
 const startIdx = html.indexOf(START);
 const endIdx   = html.lastIndexOf(END);
 
-if (startIdx === -1) {
+if(startIdx === -1){
   console.error("❌ Bloco <script type=\"text/babel\"> não encontrado.");
   process.exit(1);
 }
@@ -36,26 +40,18 @@ const jsxCode = html.slice(startIdx + START.length, endIdx);
 
 let compiled;
 try {
-  const result = Babel.transform(jsxCode, {
-    presets: ["react"],
-    filename: "app.jsx",
-  });
-  compiled = result.code;
+  compiled = Babel.transform(jsxCode, { presets:["react"], filename:"app.jsx" }).code;
 } catch(err) {
-  console.error("❌ Erro de compilação JSX:\n" + err.message);
+  console.error("❌ Erro de compilação:\n" + err.message);
   process.exit(1);
 }
 
-// Monta HTML final sem a tag Babel e com JS puro
-const before = html.slice(0, startIdx);
-const after  = html.slice(endIdx + END.length);
-
-const finalHTML = before
+const finalHTML = html
   .replace('<script src="/babel.min.js"></script>\n', '')
   .replace('<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>\n', '')
+  .slice(0, startIdx)
   + `<script>\n${compiled}\n</script>`
-  + after;
+  + html.slice(endIdx + END.length);
 
 fs.writeFileSync(DEST, finalHTML, "utf8");
-console.log("✅ Compilado! Arquivo: .compiled.html");
-console.log("   Rode agora: node server.js");
+console.log("✅ Compilado com sucesso! → .compiled.html");
