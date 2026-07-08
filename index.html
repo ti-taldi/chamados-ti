@@ -1464,244 +1464,334 @@ function EmailConfig({users,roles,onClose}){
 }
 
 // ── APP ────────────────────────────────────────────────────
-function App(){
-  const init=initData();
-  const[users,   setUsers]  =useState(()=>ls.get("ti_users",  init.users));
-  const[roles,   setRoles]  =useState(()=>ls.get("ti_roles",  init.roles));
-  const[tickets, setTickets]=useState(()=>ls.get("ti_tickets",[]));
-  const[assets,  setAssets] =useState(()=>ls.get("ti_assets", []));
-  const[session, setSession]=useState(()=>resolveSession());
-  const[authView,setAuthView]=useState("login");
-  const[view,    setView]   =useState("form");
-  const[toast,   setToast]  =useState(null);
-  const[showEmailCfg,setShowEmailCfg]=useState(false);
+function App() {
+  const init = initData();
+  const [users, setUsers] = useState(() => ls.get("ti_users", init.users));
+  const [roles, setRoles] = useState(() => ls.get("ti_roles", init.roles));
+  const [tickets, setTickets] = useState(() => ls.get("ti_tickets", []));
+  const [assets, setAssets] = useState(() => ls.get("ti_assets", []));
+  const [session, setSession] = useState(() => resolveSession());
+  const [authView, setAuthView] = useState("login");
+  const [view, setView] = useState("form");
+  const [toast, setToast] = useState(null);
+  const [showEmailCfg, setShowEmailCfg] = useState(false);
 
-  // Remove loading screen + load server data on mount
-  useEffect(()=>{
-    loadFromServer().then(()=>{
-      // Reload state from localStorage after server sync
-      const init2=initData();
-      setUsers(ls.get("ti_users",init2.users));
-      setRoles(ls.get("ti_roles",init2.roles));
-      setTickets(ls.get("ti_tickets",[]));
-      setAssets(ls.get("ti_assets",[]));
-    }).finally(()=>{
-      const el=document.getElementById("loading-screen");
-      if(el){el.style.transition="opacity .3s";el.style.opacity="0";setTimeout(()=>el.remove(),300);}
+  // =========================================================
+  // CORREÇÃO: Todos os "useEffect" no topo antes de qualquer "return"
+  // =========================================================
+
+  useEffect(() => {
+    loadFromServer().then(() => {
+      const init2 = initData();
+      setUsers(ls.get("ti_users", init2.users));
+      setRoles(ls.get("ti_roles", init2.roles));
+      setTickets(ls.get("ti_tickets", []));
+      setAssets(ls.get("ti_assets", []));
+    }).finally(() => {
+      const el = document.getElementById("loading-screen");
+      if (el) {
+        el.style.transition = "opacity .3s";
+        el.style.opacity = "0";
+        setTimeout(() => el.remove(), 300);
+      }
     });
-  },[]);
+  }, []);
 
-  const showToast=(msg,icon="ti-check",color="var(--green)")=>{setToast({msg,icon,color});setTimeout(()=>setToast(null),3000);};
+  useEffect(() => {
+    if (!session) return;
+    const live = users.find(u => u.id === session.id);
+    if (live && (live.role !== session.role || live.roleId !== session.roleId)) {
+      const s = {
+        ...session,
+        role: live.role,
+        roleId: live.roleId
+      };
+      setSession(s);
+      ss.set("ti_session", s);
+    }
+  }, [users, session]);
 
-  // Envia e-mail para usuários cujo cargo tem emailNotif=true
-  const sendEmailNotif=async(ticket)=>{
-    try{
-      // Coleta destinatários
-      const notifUsers=users.filter(u=>{
-        if(u.role==="pending"||u.role==="rejected")return false;
-        if(u.role==="admin"){ const r=roles.find(r=>r.id==="role-admin"); return r?.emailNotif!==false; }
-        const r=roles.find(r=>r.id===u.roleId);
-        return r?.emailNotif===true;
+  const isAdmin = session?.role === "admin";
+  const perms = session ? getPerms(session, roles) : [];
+  const pendingCnt = users.filter(u => u.role === "pending").length;
+
+  const allNav = [{
+    id: "form", label: "Novo Chamado", icon: "ti-plus"
+  }, {
+    id: "dashboard", label: "Painel de Chamados", icon: "ti-layout-dashboard"
+  }, {
+    id: "patrimonio", label: "Patrimônio", icon: "ti-devices"
+  }, {
+    id: "mine", label: "Meus Chamados", icon: "ti-ticket"
+  }];
+
+  const navItems = [...allNav.filter(n => perms.includes(n.id)), ...(isAdmin ? [{
+    id: "users", label: "Usuários", icon: "ti-users", badge: pendingCnt
+  }, {
+    id: "cargos", label: "Cargos", icon: "ti-shield"
+  }] : [])];
+
+  useEffect(() => {
+    if (!session) return;
+    const ids = navItems.map(n => n.id);
+    if (!ids.includes(view)) setView(ids[0] || "form");
+    // eslint-disable-next-line
+  }, [session?.roleId, session?.role]);
+
+  // =========================================================
+
+  const showToast = (msg, icon = "ti-check", color = "var(--green)") => {
+    setToast({ msg, icon, color });
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  const sendEmailNotif = async ticket => {
+    try {
+      const notifUsers = users.filter(u => {
+        if (u.role === "pending" || u.role === "rejected") return false;
+        if (u.role === "admin") {
+          const r = roles.find(r => r.id === "role-admin");
+          return r?.emailNotif !== false;
+        }
+        const r = roles.find(r => r.id === u.roleId);
+        return r?.emailNotif === true;
       });
-      const to=notifUsers.map(u=>u.email).filter(Boolean);
-
-      if(!to.length){
-        console.log("[E-mail] Nenhum destinatário com notificação ativa.");
-        return;
-      }
-
-      const res=await fetch("/api/send-email",{
-        method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({to,ticket}),
+      const to = notifUsers.map(u => u.email).filter(Boolean);
+      if (!to.length) return;
+      const res = await fetch("/api/send-email", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ to, ticket })
       });
-      const d=await res.json();
-
-      if(d.skipped){
-        console.log("[E-mail] Notificações desativadas no servidor ou SMTP não configurado.");
-        return;
-      }
-      if(d.ok){
-        showToast(`📧 E-mail enviado para ${d.sent} destinatário${d.sent!==1?"s":""}!`,"ti-mail","var(--blue-t)");
+      const d = await res.json();
+      if (d.skipped) return;
+      if (d.ok) {
+        showToast(`📧 E-mail enviado para ${d.sent} destinatário${d.sent !== 1 ? "s" : ""}!`, "ti-mail", "var(--blue-t)");
       } else {
-        showToast(`⚠️ Falha no e-mail: ${d.error}`,"ti-alert-circle","var(--amber-t)");
-        console.error("[E-mail] Erro:", d.error);
+        showToast(`⚠️ Falha no e-mail: ${d.error}`, "ti-alert-circle", "var(--amber-t)");
       }
-    }catch(e){
+    } catch (e) {
       console.warn("[E-mail] Erro de rede:", e.message);
     }
   };
 
-  const login=u=>{
-    const s={id:u.id,name:u.name,email:u.email,role:u.role,roleId:u.roleId};
-    setSession(s);ss.set("ti_session",s);
-    const saved=ls.get("ti_remember",null);
-    if(saved) ls.set("ti_persist",{...s,expiresAt:Date.now()+8*60*60*1000});
-    setView(u.role==="admin"?"dashboard":"form");
+  const login = u => {
+    const s = { id: u.id, name: u.name, email: u.email, role: u.role, roleId: u.roleId };
+    setSession(s);
+    ss.set("ti_session", s);
+    const saved = ls.get("ti_remember", null);
+    if (saved) ls.set("ti_persist", { ...s, expiresAt: Date.now() + 8 * 60 * 60 * 1000 });
+    setView(u.role === "admin" ? "dashboard" : "form");
   };
-  const logout=()=>{setSession(null);ss.del("ti_session");ls.del("ti_persist");setAuthView("login");};
-  const register=u=>{const up=[...users,u];setUsers(up);ls.set("ti_users",up);setAuthView("login");};
 
-  const submitTicket=form=>{
-    const id=genTID();
-    const t={id,createdAt:Date.now(),status:"aguardando",deadline:null,adminNotes:"",userId:session.id,userEmail:session.email,...form};
-    const up=[...tickets,t];setTickets(up);ls.set("ti_tickets",up);
-    sendEmailNotif(t);        // notifica admins/técnicos
-    sendTicketConfirm(t);     // confirma abertura para o solicitante
+  const logout = () => {
+    setSession(null);
+    ss.del("ti_session");
+    ls.del("ti_persist");
+    setAuthView("login");
+  };
+
+  const register = u => {
+    const up = [...users, u];
+    setUsers(up);
+    ls.set("ti_users", up);
+    setAuthView("login");
+  };
+
+  const submitTicket = form => {
+    const id = genTID();
+    const t = { id, createdAt: Date.now(), status: "aguardando", deadline: null, adminNotes: "", userId: session.id, userEmail: session.email, ...form };
+    const up = [...tickets, t];
+    setTickets(up);
+    ls.set("ti_tickets", up);
+    sendEmailNotif(t);
+    sendTicketConfirm(t);
     return id;
   };
 
-  // Confirmação de abertura de chamado para o solicitante
-  const sendTicketConfirm=async(ticket)=>{
-    if(!ticket.userEmail)return;
-    try{
-      await fetch("/api/send-ticket-confirm",{
-        method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({ticket}),
+  const sendTicketConfirm = async ticket => {
+    if (!ticket.userEmail) return;
+    try {
+      await fetch("/api/send-ticket-confirm", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ticket })
       });
-    }catch(e){console.warn("[E-mail] Confirmação:",e.message);}
+    } catch (e) {
+      console.warn("[E-mail] Confirmação:", e.message);
+    }
   };
 
-  const updateTicket=(id,updates)=>{
-    const ticket=tickets.find(t=>t.id===id);
-    const up=tickets.map(t=>t.id===id?{...t,...updates,updatedAt:Date.now()}:t);
-    setTickets(up);ls.set("ti_tickets",up);
-    // Só envia e-mail se houve mudança real de status OU notas do técnico
-    if(ticket&&ticket.userEmail){
-      const statusChanged=updates.status&&updates.status!==ticket.status;
-      const notesChanged=updates.adminNotes!==undefined&&updates.adminNotes.trim()!==''&&updates.adminNotes!==ticket.adminNotes;
-      if(statusChanged||notesChanged){
-        fetch("/api/send-ticket-update",{
-          method:"POST",headers:{"Content-Type":"application/json"},
-          body:JSON.stringify({ticket,updates}),
-        }).then(r=>r.json()).then(d=>{
-          if(d.ok&&!d.skipped)showToast("📧 Solicitante notificado por e-mail!","ti-mail","var(--green-t)");
-        }).catch(()=>{});
+  const updateTicket = (id, updates) => {
+    const ticket = tickets.find(t => t.id === id);
+    const up = tickets.map(t => t.id === id ? { ...t, ...updates, updatedAt: Date.now() } : t);
+    setTickets(up);
+    ls.set("ti_tickets", up);
+    if (ticket && ticket.userEmail) {
+      const statusChanged = updates.status && updates.status !== ticket.status;
+      const notesChanged = updates.adminNotes !== undefined && updates.adminNotes.trim() !== '' && updates.adminNotes !== ticket.adminNotes;
+      if (statusChanged || notesChanged) {
+        fetch("/api/send-ticket-update", {
+          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ticket, updates })
+        }).then(r => r.json()).then(d => {
+          if (d.ok && !d.skipped) showToast("📧 Solicitante notificado por e-mail!", "ti-mail", "var(--green-t)");
+        }).catch(() => {});
       }
     }
   };
-  const userAction=(id,role)=>{const up=users.map(u=>u.id===id?{...u,role}:u);setUsers(up);ls.set("ti_users",up);};
-  const deleteUser=id=>{const up=users.filter(u=>u.id!==id);setUsers(up);ls.set("ti_users",up);};
-  const changeRole=(uid,rid)=>{const up=users.map(u=>u.id===uid?{...u,roleId:rid}:u);setUsers(up);ls.set("ti_users",up);};
-  const saveRole=role=>{const up=roles.find(r=>r.id===role.id)?roles.map(r=>r.id===role.id?role:r):[...roles,role];setRoles(up);ls.set("ti_roles",up);};
-  const deleteRole=id=>{
-    const up2=users.map(u=>u.roleId===id?{...u,roleId:"role-user"}:u);setUsers(up2);ls.set("ti_users",up2);
-    const up=roles.filter(r=>r.id!==id);setRoles(up);ls.set("ti_roles",up);
-  };
-  const saveAsset=asset=>{const up=assets.find(a=>a.id===asset.id)?assets.map(a=>a.id===asset.id?asset:a):[...assets,asset];setAssets(up);ls.set("ti_assets",up);};
-  const deleteAsset=id=>{const up=assets.filter(a=>a.id!==id);setAssets(up);ls.set("ti_assets",up);};
 
-  const exportData=()=>{
-    const data={exportedAt:new Date().toISOString(),tickets,assets,roles,users:users.map(({password,...u})=>u)};
-    const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
-    const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=`chamados-backup-${new Date().toISOString().slice(0,10)}.json`;a.click();
+  const userAction = (id, role) => {
+    const up = users.map(u => u.id === id ? { ...u, role } : u);
+    setUsers(up);
+    ls.set("ti_users", up);
+  };
+
+  const deleteUser = id => {
+    const up = users.filter(u => u.id !== id);
+    setUsers(up);
+    ls.set("ti_users", up);
+  };
+
+  const changeRole = (uid, rid) => {
+    const up = users.map(u => u.id === uid ? { ...u, roleId: rid } : u);
+    setUsers(up);
+    ls.set("ti_users", up);
+  };
+
+  const saveRole = role => {
+    const up = roles.find(r => r.id === role.id) ? roles.map(r => r.id === role.id ? role : r) : [...roles, role];
+    setRoles(up);
+    ls.set("ti_roles", up);
+  };
+
+  const deleteRole = id => {
+    const up2 = users.map(u => u.roleId === id ? { ...u, roleId: "role-user" } : u);
+    setUsers(up2);
+    ls.set("ti_users", up2);
+    const up = roles.filter(r => r.id !== id);
+    setRoles(up);
+    ls.set("ti_roles", up);
+  };
+
+  const saveAsset = asset => {
+    const up = assets.find(a => a.id === asset.id) ? assets.map(a => a.id === asset.id ? asset : a) : [...assets, asset];
+    setAssets(up);
+    ls.set("ti_assets", up);
+  };
+
+  const deleteAsset = id => {
+    const up = assets.filter(a => a.id !== id);
+    setAssets(up);
+    ls.set("ti_assets", up);
+  };
+
+  const exportData = () => {
+    const data = { exportedAt: new Date().toISOString(), tickets, assets, roles, users: users.map(({ password, ...u }) => u) };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `chamados-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
     showToast("Backup exportado com sucesso!");
   };
-  const importData=e=>{
-    const file=e.target.files[0];if(!file)return;
-    const r=new FileReader();
-    r.onload=ev=>{
-      try{
-        const data=JSON.parse(ev.target.result);
-        if(!data.tickets||!data.users)throw new Error();
-        const merged=data.users.map(u=>{const ex=users.find(x=>x.id===u.id);return ex?{...u,password:ex.password}:{...u,password:enc("trocar123")};});
-        setTickets(data.tickets);ls.set("ti_tickets",data.tickets);
-        setUsers(merged);ls.set("ti_users",merged);
-        if(data.assets){setAssets(data.assets);ls.set("ti_assets",data.assets);}
-        if(data.roles){const mr=[...SYS_ROLES,...(data.roles||[]).filter(r=>!r.isSystem)];setRoles(mr);ls.set("ti_roles",mr);}
+
+  const importData = e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const r = new FileReader();
+    r.onload = ev => {
+      try {
+        const data = JSON.parse(ev.target.result);
+        if (!data.tickets || !data.users) throw new Error();
+        const merged = data.users.map(u => {
+          const ex = users.find(x => x.id === u.id);
+          return ex ? { ...u, password: ex.password } : { ...u, password: enc("trocar123") };
+        });
+        setTickets(data.tickets);
+        ls.set("ti_tickets", data.tickets);
+        setUsers(merged);
+        ls.set("ti_users", merged);
+        if (data.assets) {
+          setAssets(data.assets);
+          ls.set("ti_assets", data.assets);
+        }
+        if (data.roles) {
+          const mr = [...SYS_ROLES, ...(data.roles || []).filter(r => !r.isSystem)];
+          setRoles(mr);
+          ls.set("ti_roles", mr);
+        }
         showToast(`Importado: ${data.tickets.length} chamados, ${merged.length} usuários`);
-      }catch{showToast("Arquivo inválido","ti-alert-circle","var(--red)");}
+      } catch {
+        showToast("Arquivo inválido", "ti-alert-circle", "var(--red)");
+      }
     };
-    r.readAsText(file);e.target.value="";
+    r.readAsText(file);
+    e.target.value = "";
   };
 
-  if(!session)return authView==="login"
-    ?<LoginScreen users={users} onLogin={login} onGoRegister={()=>setAuthView("register")}/>
-    :<RegisterScreen users={users} roles={roles} onRegister={register} onGoLogin={()=>setAuthView("login")}/>;
+  // RETORNOS CONDICIONAIS
+  if (!session) return authView === "login" ? <LoginScreen users={users} onLogin={login} onGoRegister={() => setAuthView("register")} /> : <RegisterScreen users={users} roles={roles} onRegister={register} onGoLogin={() => setAuthView("login")} />;
+  if (session.role === "pending") return <PendingScreen session={session} onLogout={logout} />;
+  if (session.role === "rejected") return <RejectedScreen session={session} onLogout={logout} />;
 
-  // Sync session role if admin changed it — MUST be in useEffect, not during render
-  useEffect(()=>{
-    if(!session) return;
-    const live=users.find(u=>u.id===session.id);
-    if(live&&(live.role!==session.role||live.roleId!==session.roleId)){
-      const s={...session,role:live.role,roleId:live.roleId};
-      setSession(s); ss.set("ti_session",s);
-    }
-  },[users]);
-
-  if(session.role==="pending")  return <PendingScreen  session={session} onLogout={logout}/>;
-  if(session.role==="rejected") return <RejectedScreen session={session} onLogout={logout}/>;
-
-  const isAdmin=session.role==="admin";
-  const perms=getPerms(session,roles);
-  const pendingCnt=users.filter(u=>u.role==="pending").length;
-
-  const allNav=[
-    {id:"form",       label:"Novo Chamado",      icon:"ti-plus"},
-    {id:"dashboard",  label:"Painel de Chamados", icon:"ti-layout-dashboard"},
-    {id:"patrimonio", label:"Patrimônio",         icon:"ti-devices"},
-    {id:"mine",       label:"Meus Chamados",      icon:"ti-ticket"},
-  ];
-  const navItems=[
-    ...allNav.filter(n=>perms.includes(n.id)),
-    ...(isAdmin?[{id:"users",label:"Usuários",icon:"ti-users",badge:pendingCnt},{id:"cargos",label:"Cargos",icon:"ti-shield"}]:[]),
-  ];
-
-  useEffect(()=>{
-    const ids=navItems.map(n=>n.id);
-    if(!ids.includes(view)) setView(ids[0]||"form");
-  // eslint-disable-next-line
-  },[session?.roleId, session?.role]);
-
-  const pageInfo={
-    form:      {title:"Novo Chamado",       desc:"Preencha o formulário para abrir um chamado"},
-    dashboard: {title:"Painel de Chamados", desc:`${tickets.length} chamado${tickets.length!==1?"s":""} no sistema`},
-    patrimonio:{title:"Patrimônio",         desc:`${assets.filter(a=>a.type==="notebook").length} notebooks · ${assets.filter(a=>a.type==="monitor").length} monitores`},
-    mine:      {title:"Meus Chamados",      desc:`${tickets.filter(t=>t.userId===session.id).length} chamados`},
-    users:     {title:"Gestão de Usuários", desc:pendingCnt>0?`${pendingCnt} aguardando aprovação`:"Gerencie usuários"},
-    cargos:    {title:"Cargos",             desc:`${roles.length} cargo${roles.length!==1?"s":""} configurados`},
+  const pageInfo = {
+    form: { title: "Novo Chamado", desc: "Preencha o formulário para abrir um chamado" },
+    dashboard: { title: "Painel de Chamados", desc: `${tickets.length} chamado${tickets.length !== 1 ? "s" : ""} no sistema` },
+    patrimonio: { title: "Patrimônio", desc: `${assets.filter(a => a.type === "notebook").length} notebooks · ${assets.filter(a => a.type === "monitor").length} monitores` },
+    mine: { title: "Meus Chamados", desc: `${tickets.filter(t => t.userId === session.id).length} chamados` },
+    users: { title: "Gestão de Usuários", desc: pendingCnt > 0 ? `${pendingCnt} aguardando aprovação` : "Gerencie usuários" },
+    cargos: { title: "Cargos", desc: `${roles.length} cargo${roles.length !== 1 ? "s" : ""} configurados` }
   };
 
-  return(
+  return (
     <>
       <nav className="navbar">
-        <div className="navbar-brand"><i className="ti ti-headset"/>TI Chamados</div>
+        <div className="navbar-brand">
+          <i className="ti ti-headset"></i>TI Chamados
+        </div>
         <div className="navbar-nav">
-          {navItems.map(v=><div key={v.id} className={`nav-link${view===v.id?" active":""}`} onClick={()=>setView(v.id)}>
-            <i className={`ti ${v.icon}`}/>{v.label}
-            {v.badge>0&&<span className="nav-badge">{v.badge}</span>}
-          </div>)}
+          {navItems.map(v => (
+            <div key={v.id} className={`nav-link${view === v.id ? " active" : ""}`} onClick={() => setView(v.id)}>
+              <i className={`ti ${v.icon}`}></i>{v.label}
+              {v.badge > 0 && <span className="nav-badge">{v.badge}</span>}
+            </div>
+          ))}
         </div>
         <div className="navbar-right">
-          {isAdmin&&<>
-            <button className="btn-navbar" onClick={exportData}><i className="ti ti-download"/>Exportar</button>
-            <label className="btn-navbar"><i className="ti ti-upload"/>Importar<input type="file" accept=".json" onChange={importData} style={{display:"none"}}/></label>
-            <button className="btn-navbar" onClick={()=>setShowEmailCfg(true)} title="Configurar e-mail"><i className="ti ti-mail"/>E-mail</button>
-            <div className="navbar-divider"/>
-          </>}
+          {isAdmin && (
+            <>
+              <button className="btn-navbar" onClick={exportData}><i className="ti ti-download"></i>Exportar</button>
+              <label className="btn-navbar">
+                <i className="ti ti-upload"></i>Importar
+                <input type="file" accept=".json" onChange={importData} style={{ display: "none" }} />
+              </label>
+              <button className="btn-navbar" onClick={() => setShowEmailCfg(true)} title="Configurar e-mail"><i className="ti ti-mail"></i>E-mail</button>
+              <div className="navbar-divider"></div>
+            </>
+          )}
           <div className="navbar-user">
-            <div className="navbar-avatar"><i className="ti ti-user"/></div>
+            <div className="navbar-avatar"><i className="ti ti-user"></i></div>
             <span className="navbar-username">{session.name}</span>
-            <span className="navbar-role">{isAdmin?"Admin":roles.find(r=>r.id===session.roleId)?.name||"Usuário"}</span>
+            <span className="navbar-role">{isAdmin ? "Admin" : roles.find(r => r.id === session.roleId)?.name || "Usuário"}</span>
           </div>
-          <button className="navbar-logout" onClick={logout} title="Sair"><i className="ti ti-logout"/></button>
+          <button className="navbar-logout" onClick={logout} title="Sair"><i className="ti ti-logout"></i></button>
         </div>
       </nav>
+
       <div className="page-header">
         <div className="page-header-inner">
           <h2>{pageInfo[view]?.title}</h2>
           <p>{pageInfo[view]?.desc}</p>
         </div>
       </div>
+
       <div className="page-body">
-        {view==="form"       &&<NewTicketForm session={session} onSubmit={submitTicket}/>}
-        {view==="dashboard"  &&isAdmin&&<AdminDashboard tickets={tickets} onUpdate={updateTicket}/>}
-        {view==="patrimonio" &&<AssetManagement assets={assets} users={users} session={session} onSave={saveAsset} onDelete={deleteAsset}/>}
-        {view==="mine"       &&<MyTickets tickets={tickets} session={session}/>}
-        {view==="users"      &&isAdmin&&<UserManagement users={users} roles={roles} currentUser={session} onApprove={id=>userAction(id,"user")} onReject={id=>userAction(id,"rejected")} onPromote={id=>userAction(id,"admin")} onDemote={id=>userAction(id,"user")} onDelete={deleteUser} onChangeRole={changeRole}/>}
-        {view==="cargos"     &&isAdmin&&<RoleManagement roles={roles} onSave={saveRole} onDelete={deleteRole}/>}
+        {view === "form" && <NewTicketForm session={session} onSubmit={submitTicket} />}
+        {view === "dashboard" && isAdmin && <AdminDashboard tickets={tickets} onUpdate={updateTicket} />}
+        {view === "patrimonio" && <AssetManagement assets={assets} users={users} session={session} onSave={saveAsset} onDelete={deleteAsset} />}
+        {view === "mine" && <MyTickets tickets={tickets} session={session} />}
+        {view === "users" && isAdmin && <UserManagement users={users} roles={roles} currentUser={session} onApprove={id => userAction(id, "user")} onReject={id => userAction(id, "rejected")} onPromote={id => userAction(id, "admin")} onDemote={id => userAction(id, "user")} onDelete={deleteUser} onChangeRole={changeRole} />}
+        {view === "cargos" && isAdmin && <RoleManagement roles={roles} onSave={saveRole} onDelete={deleteRole} />}
       </div>
-      {toast&&<div className="toast"><i className={`ti ${toast.icon}`} style={{color:toast.color,fontSize:16}}/>{toast.msg}</div>}
-      {showEmailCfg&&<EmailConfig users={users} roles={roles} onClose={()=>setShowEmailCfg(false)}/>}
+
+      {toast && <div className="toast"><i className={`ti ${toast.icon}`} style={{ color: toast.color, fontSize: 16 }}></i>{toast.msg}</div>}
+      {showEmailCfg && <EmailConfig users={users} roles={roles} onClose={() => setShowEmailCfg(false)} />}
     </>
   );
 }
