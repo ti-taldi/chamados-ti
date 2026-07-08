@@ -1470,7 +1470,9 @@ function EmailConfig({users,roles,onClose}){
 
 // ── APP ────────────────────────────────────────────────────
 function App() {
-  const [isReady, setIsReady] = useState(false); // NOVO: Trava a tela
+  // NOVO: A variável que tranca o aplicativo
+  const [isReady, setIsReady] = useState(false); 
+  
   const [users, setUsers] = useState([]);
   const [roles, setRoles] = useState([]);
   const [tickets, setTickets] = useState([]);
@@ -1481,70 +1483,91 @@ function App() {
   const [toast, setToast] = useState(null);
   const [showEmailCfg, setShowEmailCfg] = useState(false);
 
+  // 1. CARREGAMENTO BLINDADO: Puxa a verdade absoluta do servidor ANTES de tudo
   useEffect(() => {
-    loadFromServer().then(() => {
-      const init2 = initData();
-      setUsers(ls.get("ti_users", init2.users));
-      setRoles(ls.get("ti_roles", init2.roles));
-      setTickets(ls.get("ti_tickets", []));
-      setAssets(ls.get("ti_assets", []));
-    }).finally(() => {
-      setIsReady(true); // Libera o app APÓS o banco carregar
-      const el = document.getElementById("loading-screen");
-      if (el) {
-        el.style.transition = "opacity .3s";
-        el.style.opacity = "0";
-        setTimeout(() => el.remove(), 300);
-      }
-    });
+    // Adiciona o Date.now() para impedir que a aba anônima use cache fantasma
+    fetch("/api/db?t=" + Date.now(), { cache: "no-store" })
+      .then(res => res.json())
+      .then(db => {
+        const defaultUsers = [{id:"admin-1",name:"Administrador",email:"admin@ti.local",password:enc("admin123"),role:"admin",roleId:"role-admin",company:"",createdAt:Date.now()}];
+        
+        // Puxa do servidor. Se estiver vazio, usa os padrões.
+        const finalUsers = db.ti_users && db.ti_users.length > 0 ? db.ti_users : defaultUsers;
+        const finalRoles = db.ti_roles && db.ti_roles.length > 0 ? db.ti_roles : SYS_ROLES;
+        
+        setUsers(finalUsers);
+        setRoles(finalRoles);
+        setTickets(db.ti_tickets || []);
+        setAssets(db.ti_assets || []);
+
+        // Salva uma cópia de segurança silenciosa no cache do navegador
+        localStorage.setItem("ti_users", JSON.stringify(finalUsers));
+        localStorage.setItem("ti_roles", JSON.stringify(finalRoles));
+        localStorage.setItem("ti_tickets", JSON.stringify(db.ti_tickets || []));
+        localStorage.setItem("ti_assets", JSON.stringify(db.ti_assets || []));
+      })
+      .catch(err => {
+        console.warn("Servidor offline, usando cache local de emergência.");
+        setUsers(ls.get("ti_users", []));
+        setRoles(ls.get("ti_roles", SYS_ROLES));
+        setTickets(ls.get("ti_tickets", []));
+        setAssets(ls.get("ti_assets", []));
+      })
+      .finally(() => {
+        // O BANCO CHEGOU! Libera o aplicativo para renderizar
+        setIsReady(true);
+        const el = document.getElementById("loading-screen");
+        if (el) {
+          el.style.transition = "opacity .3s";
+          el.style.opacity = "0";
+          setTimeout(() => el.remove(), 300);
+        }
+      });
   }, []);
 
+  // 2. Sincroniza mudanças de permissão
   useEffect(() => {
-    if (!session) return;
+    if (!isReady || !session) return;
     const live = users.find(u => u.id === session.id);
     if (live && (live.role !== session.role || live.roleId !== session.roleId)) {
-      const s = {
-        ...session,
-        role: live.role,
-        roleId: live.roleId
-      };
+      const s = { ...session, role: live.role, roleId: live.roleId };
       setSession(s);
       ss.set("ti_session", s);
     }
-  }, [users, session]);
+  }, [users, session, isReady]);
 
   const isAdmin = session?.role === "admin";
   const perms = session ? getPerms(session, roles) : [];
   const pendingCnt = users.filter(u => u.role === "pending").length;
 
-  const allNav = [{
-    id: "form", label: "Novo Chamado", icon: "ti-plus"
-  }, {
-    id: "dashboard", label: "Painel de Chamados", icon: "ti-layout-dashboard"
-  }, {
-    id: "patrimonio", label: "Patrimônio", icon: "ti-devices"
-  }, {
-    id: "mine", label: "Meus Chamados", icon: "ti-ticket"
-  }];
+  const allNav = [
+    { id: "form", label: "Novo Chamado", icon: "ti-plus" },
+    { id: "dashboard", label: "Painel de Chamados", icon: "ti-layout-dashboard" },
+    { id: "patrimonio", label: "Patrimônio", icon: "ti-devices" },
+    { id: "mine", label: "Meus Chamados", icon: "ti-ticket" }
+  ];
 
-  const navItems = [...allNav.filter(n => perms.includes(n.id)), ...(isAdmin ? [{
-    id: "users", label: "Usuários", icon: "ti-users", badge: pendingCnt
-  }, {
-    id: "cargos", label: "Cargos", icon: "ti-shield"
-  }] : [])];
+  const navItems = [...allNav.filter(n => perms.includes(n.id)), ...(isAdmin ? [
+    { id: "users", label: "Usuários", icon: "ti-users", badge: pendingCnt },
+    { id: "cargos", label: "Cargos", icon: "ti-shield" }
+  ] : [])];
 
   useEffect(() => {
-    if (!session) return;
+    if (!isReady || !session) return;
     const ids = navItems.map(n => n.id);
     if (!ids.includes(view)) setView(ids[0] || "form");
     // eslint-disable-next-line
-  }, [session?.roleId, session?.role]);
+  }, [session?.roleId, session?.role, isReady]);
+
 
   // =========================================================
+  // O SEGREDO ESTÁ AQUI: Se o banco não carregou, trave a tela!
+  // =========================================================
+  if (!isReady) return null;
 
- if (!isReady) return null;
 
   const showToast = (msg, icon = "ti-check", color = "var(--green)") => {
+    setToast({ msg, icon, color });
     setTimeout(() => setToast(null), 3000);
   };
 
@@ -1595,7 +1618,8 @@ function App() {
   const register = u => {
     const up = [...users, u];
     setUsers(up);
-    ls.set("ti_users", up);
+    // Usa fetch direto para não depender do cache
+    fetch("/api/db", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ti_users: up }) });
     setAuthView("login");
   };
 
@@ -1604,7 +1628,7 @@ function App() {
     const t = { id, createdAt: Date.now(), status: "aguardando", deadline: null, adminNotes: "", userId: session.id, userEmail: session.email, ...form };
     const up = [...tickets, t];
     setTickets(up);
-    ls.set("ti_tickets", up);
+    fetch("/api/db", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ti_tickets: up }) });
     sendEmailNotif(t);
     sendTicketConfirm(t);
     return id;
@@ -1625,7 +1649,8 @@ function App() {
     const ticket = tickets.find(t => t.id === id);
     const up = tickets.map(t => t.id === id ? { ...t, ...updates, updatedAt: Date.now() } : t);
     setTickets(up);
-    ls.set("ti_tickets", up);
+    fetch("/api/db", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ti_tickets: up }) });
+    
     if (ticket && ticket.userEmail) {
       const statusChanged = updates.status && updates.status !== ticket.status;
       const notesChanged = updates.adminNotes !== undefined && updates.adminNotes.trim() !== '' && updates.adminNotes !== ticket.adminNotes;
@@ -1642,46 +1667,45 @@ function App() {
   const userAction = (id, role) => {
     const up = users.map(u => u.id === id ? { ...u, role } : u);
     setUsers(up);
-    ls.set("ti_users", up);
+    fetch("/api/db", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ti_users: up }) });
   };
 
   const deleteUser = id => {
     const up = users.filter(u => u.id !== id);
     setUsers(up);
-    ls.set("ti_users", up);
+    fetch("/api/db", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ti_users: up }) });
   };
 
   const changeRole = (uid, rid) => {
     const up = users.map(u => u.id === uid ? { ...u, roleId: rid } : u);
     setUsers(up);
-    ls.set("ti_users", up);
+    fetch("/api/db", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ti_users: up }) });
   };
 
   const saveRole = role => {
     const up = roles.find(r => r.id === role.id) ? roles.map(r => r.id === role.id ? role : r) : [...roles, role];
     setRoles(up);
-    ls.set("ti_roles", up);
+    fetch("/api/db", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ti_roles: up }) });
   };
 
   const deleteRole = id => {
     const up2 = users.map(u => u.roleId === id ? { ...u, roleId: "role-user" } : u);
     setUsers(up2);
-    ls.set("ti_users", up2);
     const up = roles.filter(r => r.id !== id);
     setRoles(up);
-    ls.set("ti_roles", up);
+    fetch("/api/db", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ti_roles: up, ti_users: up2 }) });
   };
 
   const saveAsset = asset => {
     const up = assets.find(a => a.id === asset.id) ? assets.map(a => a.id === asset.id ? asset : a) : [...assets, asset];
     setAssets(up);
-    ls.set("ti_assets", up);
+    fetch("/api/db", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ti_assets: up }) });
   };
 
   const deleteAsset = id => {
     const up = assets.filter(a => a.id !== id);
     setAssets(up);
-    ls.set("ti_assets", up);
+    fetch("/api/db", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ti_assets: up }) });
   };
 
   const exportData = () => {
@@ -1707,18 +1731,15 @@ function App() {
           return ex ? { ...u, password: ex.password } : { ...u, password: enc("trocar123") };
         });
         setTickets(data.tickets);
-        ls.set("ti_tickets", data.tickets);
         setUsers(merged);
-        ls.set("ti_users", merged);
-        if (data.assets) {
-          setAssets(data.assets);
-          ls.set("ti_assets", data.assets);
-        }
+        if (data.assets) setAssets(data.assets);
         if (data.roles) {
           const mr = [...SYS_ROLES, ...(data.roles || []).filter(r => !r.isSystem)];
           setRoles(mr);
-          ls.set("ti_roles", mr);
         }
+        fetch("/api/db", { method: "POST", headers: { "Content-Type": "application/json" }, 
+          body: JSON.stringify({ ti_users: merged, ti_tickets: data.tickets, ti_assets: data.assets||[], ti_roles: data.roles? [...SYS_ROLES, ...data.roles.filter(r=>!r.isSystem)] : SYS_ROLES }) 
+        });
         showToast(`Importado: ${data.tickets.length} chamados, ${merged.length} usuários`);
       } catch {
         showToast("Arquivo inválido", "ti-alert-circle", "var(--red)");
