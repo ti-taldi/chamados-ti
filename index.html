@@ -403,7 +403,6 @@ function LoginScreen({users,onLogin,onGoRegister}){
   const[pwd,setPwd]=useState(saved?dec(saved.pwd):"");
   const[remember,setRemember]=useState(!!saved);
   const[err,setErr]=useState("");
-  const isFirst=users.length===1&&users[0].email==="admin@ti.local";
 
   const handle=()=>{
     const u=users.find(u=>u.email.toLowerCase()===email.toLowerCase()&&dec(u.password)===pwd);
@@ -422,7 +421,6 @@ function LoginScreen({users,onLogin,onGoRegister}){
           <div className="auth-logo-icon"><i className="ti ti-headset"/></div>
           <h1>TI Chamados</h1><p>Sistema de suporte técnico</p>
         </div>
-        {isFirst&&<div className="auth-hint"><i className="ti ti-info-circle" style={{marginRight:6}}/><strong>Primeiro acesso: </strong>use <code>admin@ti.local</code> / <code>admin123</code></div>}
         {err&&<div className="auth-error"><i className="ti ti-alert-circle"/>{err}</div>}
         <div className="auth-field"><label className="auth-label">E-mail</label>
           <input className="auth-input" type="text" placeholder="seu@email.com" value={email} onChange={e=>setEmail(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handle()}/>
