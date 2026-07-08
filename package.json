@@ -3,9 +3,12 @@
   "version": "1.0.0",
   "description": "Sistema de Chamados TI",
   "main": "server.js",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "scripts": {
     "start": "node server.js",
-    "setup": "npm install && node build.js"
+    "build": "node build.js"
   },
   "dependencies": {
     "nodemailer": "^6.9.0",
