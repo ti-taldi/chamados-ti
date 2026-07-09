@@ -1,5 +1,7 @@
 function App(){
   // Estados iniciais vazios (serão preenchidos pelo banco)
+  window.encodePass = p => { try{return btoa(unescape(encodeURIComponent(p)));}catch{return p;} };
+  window.decodePass = p => { try{return decodeURIComponent(escape(atob(p)));}catch{return p;} };
   const [users,   setUsers]   = React.useState([]);
   const [roles,   setRoles]   = React.useState([]);
   const [tickets, setTickets] = React.useState([]);
