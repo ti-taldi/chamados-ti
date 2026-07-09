@@ -151,22 +151,11 @@ function AdminDashboard({ tickets, onUpdate }){
     {key:"concluido", label:"Concluídos",     icon:"ti-circle-check",  bg:"var(--green-bg)",  color:"var(--green-t)"},
   ];
 
-  return h("div",null,
-    h("div",{className:"stats-grid"},
-      statItems.map(s=>h("div",{key:s.key,className:`stat-card${filter===s.key?" active":""}`,onClick:()=>setFilter(s.key)},
-        h("div",{className:"stat-icon",style:{background:s.bg}},h("i",{className:`ti ${s.icon}`,style:{color:s.color}})),
-        h("div",{className:"stat-label"},s.label),
-        h("div",{className:"stat-value"},counts[s.key])
-      ))
-    ),
-    filtered.length===0
-      ? h("div",{className:"empty-state"},h("i",{className:"ti ti-inbox"}),h("p",null,`Nenhum chamado ${filter!=="all"?"nesta categoria":"registrado ainda"}`))
-      // A key aqui garante que o React destrua e recrie a lista corretamente, evitando acumulo
-      : h("div",{className:"ticket-list"}, filtered.map(t=>h(TicketCard,{key:`ticket-${t.id}-${t.status}`, ticket:t, onClick:()=>setSelected(t.id)}))),
-    
-    sel&&h(TicketModal,{ticket:sel,isAdmin:true,
-      onClose:()=>setSelected(null),
-      onSave:u=>{onUpdate(sel.id,u);setSelected(null);}})
+return h("div",null,
+    mine.length===0
+      ? h("div",{className:"empty-state"},h("i",{className:"ti ti-ticket"}),h("p",null,"Você ainda não abriu nenhum chamado"))
+      : h("div",{className:"ticket-list"},mine.map((t, index)=>h(TicketCard,{key:`${t.id}-${index}`,ticket:t,onClick:()=>setSelected(t.id)}))),
+    sel&&h(TicketModal,{ticket:sel,isAdmin:false,onClose:()=>setSelected(null)})
   );
 }
 
