@@ -123,18 +123,25 @@ function TicketCard({ ticket, onClick }){
 
 // ── Admin Dashboard ──────────────────────────────────────────
 function AdminDashboard({ tickets, onUpdate }){
-  const [filter,   setFilter]   = React.useState("all");
+  const [filter,    setFilter]   = React.useState("all");
   const [selected, setSelected] = React.useState(null);
   const h = React.createElement;
 
-  const counts = {
+  // Calculamos as contagens sempre com base nos tickets originais
+  const counts = React.useMemo(() => ({
     all:        tickets.length,
     aguardando: tickets.filter(t=>t.status==="aguardando").length,
     andamento:  tickets.filter(t=>t.status==="andamento").length,
     concluido:  tickets.filter(t=>t.status==="concluido").length,
-  };
-  const filtered = (filter==="all"?tickets:tickets.filter(t=>t.status===filter))
-    .slice().sort((a,b)=>b.createdAt-a.createdAt);
+  }), [tickets]);
+
+  // Filtramos e ordenamos usando useMemo para evitar recriação de arrays e duplicações
+  const filtered = React.useMemo(() => {
+    const list = filter === "all" ? tickets : tickets.filter(t => t.status === filter);
+    // Cria uma cópia com o [...list] antes de dar sort para não mutar o array original
+    return [...list].sort((a, b) => b.createdAt - a.createdAt);
+  }, [tickets, filter]);
+
   const sel = selected ? tickets.find(t=>t.id===selected) : null;
 
   const statItems = [
@@ -154,7 +161,9 @@ function AdminDashboard({ tickets, onUpdate }){
     ),
     filtered.length===0
       ? h("div",{className:"empty-state"},h("i",{className:"ti ti-inbox"}),h("p",null,`Nenhum chamado ${filter!=="all"?"nesta categoria":"registrado ainda"}`))
-      : h("div",{className:"ticket-list"},filtered.map(t=>h(TicketCard,{key:t.id,ticket:t,onClick:()=>setSelected(t.id)}))),
+      // A key aqui garante que o React destrua e recrie a lista corretamente, evitando acumulo
+      : h("div",{className:"ticket-list"}, filtered.map(t=>h(TicketCard,{key:`ticket-${t.id}-${t.status}`, ticket:t, onClick:()=>setSelected(t.id)}))),
+    
     sel&&h(TicketModal,{ticket:sel,isAdmin:true,
       onClose:()=>setSelected(null),
       onSave:u=>{onUpdate(sel.id,u);setSelected(null);}})
