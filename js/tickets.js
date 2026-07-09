@@ -150,6 +150,14 @@ function AdminDashboard({ tickets, onUpdate }){
     {key:"concluido", label:"Concluídos",     icon:"ti-circle-check",  bg:"var(--green-bg)",  color:"var(--green-t)"},
   ];
 
+  const filtered = React.useMemo(() => {
+    const list = filter === "all" ? tickets : tickets.filter(t => t.status === filter);
+    return [...list].sort((a, b) => b.createdAt - a.createdAt);
+  }, [tickets, filter]);
+
+  // ---> ADICIONE ESTA LINHA AQUI <---
+  console.log(`[DEBUG] Array tickets: ${tickets.length} | Desenhando cards: ${filtered.length}`);
+
   return h("div", null,
     // 1. Renderiza os Cards de Estatísticas / Abas Superiores
     h("div", { className: "dashboard-stats", style: { display: "flex", gap: "16px", marginBottom: "24px" } },
