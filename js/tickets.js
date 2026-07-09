@@ -127,20 +127,16 @@ function AdminDashboard({ tickets, onUpdate }){
   const [selected, setSelected] = React.useState(null);
   const h = React.createElement;
 
-  // Calculamos as contagens sempre com base nos tickets originais
-  const counts = React.useMemo(() => ({
+  const counts = {
     all:        tickets.length,
     aguardando: tickets.filter(t=>t.status==="aguardando").length,
     andamento:  tickets.filter(t=>t.status==="andamento").length,
     concluido:  tickets.filter(t=>t.status==="concluido").length,
-  }), [tickets]);
-
-  // Filtramos e ordenamos usando useMemo para evitar recriação de arrays e duplicações
-  const filtered = React.useMemo(() => {
-    const list = filter === "all" ? tickets : tickets.filter(t => t.status === filter);
-    // Cria uma cópia com o [...list] antes de dar sort para não mutar o array original
-    return [...list].sort((a, b) => b.createdAt - a.createdAt);
-  }, [tickets, filter]);
+  };
+  
+  // O slice() garante a cópia limpa do array antes do sort
+  const filtered = (filter==="all" ? tickets : tickets.filter(t=>t.status===filter))
+    .slice().sort((a,b)=>b.createdAt-a.createdAt);
 
   const sel = selected ? tickets.find(t=>t.id===selected) : null;
 
@@ -151,11 +147,22 @@ function AdminDashboard({ tickets, onUpdate }){
     {key:"concluido", label:"Concluídos",     icon:"ti-circle-check",  bg:"var(--green-bg)",  color:"var(--green-t)"},
   ];
 
-return h("div",null,
-    mine.length===0
-      ? h("div",{className:"empty-state"},h("i",{className:"ti ti-ticket"}),h("p",null,"Você ainda não abriu nenhum chamado"))
-      : h("div",{className:"ticket-list"},mine.map((t, index)=>h(TicketCard,{key:`${t.id}-${index}`,ticket:t,onClick:()=>setSelected(t.id)}))),
-    sel&&h(TicketModal,{ticket:sel,isAdmin:false,onClose:()=>setSelected(null)})
+  return h("div",null,
+    h("div",{className:"stats-grid"},
+      statItems.map(s=>h("div",{key:s.key,className:`stat-card${filter===s.key?" active":""}`,onClick:()=>setFilter(s.key)},
+        h("div",{className:"stat-icon",style:{background:s.bg}},h("i",{className:`ti ${s.icon}`,style:{color:s.color}})),
+        h("div",{className:"stat-label"},s.label),
+        h("div",{className:"stat-value"},counts[s.key])
+      ))
+    ),
+    filtered.length===0
+      ? h("div",{className:"empty-state"},h("i",{className:"ti ti-inbox"}),h("p",null,`Nenhum chamado ${filter!=="all"?"nesta categoria":"registrado ainda"}`))
+      // Chave t.id simples e segura
+      : h("div",{className:"ticket-list"}, filtered.map(t=>h(TicketCard,{key:t.id, ticket:t, onClick:()=>setSelected(t.id)}))),
+    
+    sel&&h(TicketModal,{ticket:sel,isAdmin:true,
+      onClose:()=>setSelected(null),
+      onSave:u=>{onUpdate(sel.id,u);setSelected(null);}})
   );
 }
 
