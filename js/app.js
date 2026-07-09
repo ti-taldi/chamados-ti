@@ -1,7 +1,7 @@
 function App(){
   const init   = initData();
-  const [users,   setUsers]   = React.useState(()=>ls.get("ti_users",   init.users));
-  const [roles,   setRoles]   = React.useState(()=>ls.get("ti_roles",   init.roles));
+  const [users,    setUsers]   = React.useState(()=>ls.get("ti_users",   init.users));
+  const [roles,    setRoles]   = React.useState(()=>ls.get("ti_roles",   init.roles));
   const [tickets, setTickets] = React.useState(()=>ls.get("ti_tickets", []));
   const [assets,  setAssets]  = React.useState(()=>ls.get("ti_assets",  []));
   const [session, setSession] = React.useState(()=>resolveSession());
@@ -30,14 +30,14 @@ function App(){
     setAuthView("login");
   };
 
-  // ── Ticket handlers ──────────────────────────────────────
+  // ── Ticket handlers (Protegido contra concorrência) ──────
   const submitTicket = form => {
     const id=genTicketId();
     const t={id,createdAt:Date.now(),status:"aguardando",deadline:null,adminNotes:"",
       userId:session.id,userEmail:session.email,...form};
     
-    setTickets(currentTickets => {
-      const up = [...currentTickets, t];
+    setTickets(prev => {
+      const up = [...prev, t];
       ls.set("ti_tickets", up);
       return up;
     });
@@ -45,8 +45,8 @@ function App(){
   };
 
   const updateTicket = (id,updates) => {
-    setTickets(currentTickets => {
-      const up = currentTickets.map(t => t.id === id ? { ...t, ...updates, updatedAt: Date.now() } : t);
+    setTickets(prev => {
+      const up = prev.map(t=>t.id===id?{...t,...updates,updatedAt:Date.now()}:t);
       ls.set("ti_tickets", up);
       return up;
     });
@@ -224,4 +224,10 @@ function App(){
   );
 }
 
-ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));
+// ── TRAVA DE SEGURANÇA PARA IMPEDIR DUPLICAÇÃO DE RENDER ──
+const rootElement = document.getElementById("root");
+if (!rootElement._reactRootContainer && !window.__APP_MOUNTED__) {
+  window.__APP_MOUNTED__ = true;
+  const root = ReactDOM.createRoot(rootElement);
+  root.render(React.createElement(App));
+}
