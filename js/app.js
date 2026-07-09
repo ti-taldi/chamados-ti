@@ -35,11 +35,21 @@ function App(){
     const id=genTicketId();
     const t={id,createdAt:Date.now(),status:"aguardando",deadline:null,adminNotes:"",
       userId:session.id,userEmail:session.email,...form};
-    const up=[...tickets,t]; setTickets(up); ls.set("ti_tickets",up); return id;
+    
+    setTickets(currentTickets => {
+      const up = [...currentTickets, t];
+      ls.set("ti_tickets", up);
+      return up;
+    });
+    return id;
   };
+
   const updateTicket = (id,updates) => {
-    const up=tickets.map(t=>t.id===id?{...t,...updates,updatedAt:Date.now()}:t);
-    setTickets(up); ls.set("ti_tickets",up);
+    setTickets(currentTickets => {
+      const up = currentTickets.map(t => t.id === id ? { ...t, ...updates, updatedAt: Date.now() } : t);
+      ls.set("ti_tickets", up);
+      return up;
+    });
   };
 
   // ── User handlers ────────────────────────────────────────
