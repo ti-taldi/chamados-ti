@@ -1649,9 +1649,16 @@ function App() {
 
   const updateTicket = (id, updates) => {
     const ticket = tickets.find(t => t.id === id);
-    const up = tickets.map(t => t.id === id ? { ...t, ...updates, updatedAt: Date.now() } : t);
-    setTickets(up);
-    saveToDB({ ti_tickets: up });
+    
+    // 1. Atualiza o estado de forma segura usando uma função de callback (Impede duplicações no React)
+    setTickets(currentTickets => 
+      currentTickets.map(t => t.id === id ? { ...t, ...updates, updatedAt: Date.now() } : t)
+    );
+
+    // 2. Prepara o array atualizado para salvar no banco do Raspberry Pi
+    const upForDB = tickets.map(t => t.id === id ? { ...t, ...updates, updatedAt: Date.now() } : t);
+    saveToDB({ ti_tickets: upForDB });
+
     if (ticket && ticket.userEmail) {
       const statusChanged = updates.status && updates.status !== ticket.status;
       const notesChanged = updates.adminNotes !== undefined && updates.adminNotes.trim() !== '' && updates.adminNotes !== ticket.adminNotes;
