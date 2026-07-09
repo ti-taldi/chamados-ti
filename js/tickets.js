@@ -189,7 +189,7 @@ function AdminDashboard({ tickets, onUpdate }){
       : h("div", { className: "ticket-list" }, 
           // O segredo está aqui: mapear APENAS o array "filtered" e usar APENAS o t.id na key
           filtered.map(t => h(TicketCard, { 
-            key: t.id, 
+            key: '${t.id}-${t.createdAt}', 
             ticket: t, 
             onClick: () => setSelected(t.id) 
           }))
