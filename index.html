@@ -289,7 +289,7 @@ const STOR_OPTS=["128 GB SSD","256 GB SSD","512 GB SSD","1 TB SSD","1 TB HD","2 
 const RES_OPTS=["1920x1080 (Full HD)","2560x1440 (2K)","3840x2160 (4K)"];
 const PANEL_OPTS=["IPS","VA","TN","OLED"];
 const EVENT_TYPES=[
-  {id:"added",      label:"Cadastrado",        icon:"ti-plus",          color:"var(--green-t)",  bg:"var(--green-bg)"},
+  {id:"added",      label:"Cadastrado",        icon:"ti-plus",         color:"var(--green-t)",  bg:"var(--green-bg)"},
   {id:"assigned",   label:"Atribuído",         icon:"ti-user-check",    color:"var(--blue-t)",   bg:"var(--blue-bg)"},
   {id:"transferred",label:"Transferido",       icon:"ti-arrows-right",  color:"var(--purple-t)", bg:"var(--purple-bg)"},
   {id:"returned",   label:"Devolvido",         icon:"ti-user-minus",    color:"var(--amber-t)",  bg:"var(--amber-bg)"},
@@ -306,7 +306,7 @@ const SCREENS=[
 ];
 const SYS_ROLES=[
   {id:"role-admin",name:"Administrador",permissions:["form","dashboard","patrimonio","mine"],emailNotif:true, isSystem:true,color:"purple"},
-  {id:"role-user", name:"Padrão",       permissions:["form","mine"],                        emailNotif:false,isSystem:true,color:"blue"},
+  {id:"role-user", name:"Padrão",       permissions:["form","mine"],                       emailNotif:false,isSystem:true,color:"blue"},
 ];
 
 // ── STORAGE ────────────────────────────────────────────────
@@ -336,11 +336,6 @@ const ss={
   get:(k,d)=>{try{const v=sessionStorage.getItem(k);return v!==null?JSON.parse(v):d;}catch{return d;}},
   set:(k,v)=>sessionStorage.setItem(k,JSON.stringify(v)),
   del:(k)=>sessionStorage.removeItem(k),
-};
-const ls={
-  get:(k,d)=>{try{const v=localStorage.getItem(k);return v!==null?JSON.parse(v):d;}catch{return d;}},
-  set:(k,v)=>localStorage.setItem(k,JSON.stringify(v)), // Apenas salva a sessão localmente
-  del:(k)=>localStorage.removeItem(k),
 };
 
 const enc=p=>{try{return btoa(unescape(encodeURIComponent(p)));}catch{return p;}};
@@ -396,26 +391,6 @@ function initData(){
   }
   return {users,roles};
 }
-function resolveSession(){
-  const ps=ls.get("ti_persist",null);
-  if(ps&&ps.expiresAt&&Date.now()<ps.expiresAt)return ps;
-  ls.del("ti_persist");
-  return ss.get("ti_session",null);
-}
-
-// ── UTILS ──────────────────────────────────────────────────
-const fmtDate=ts=>new Date(ts).toLocaleDateString("pt-BR");
-const fmtDl=s=>{if(!s)return null;const[y,m,d]=s.split("-");return`${d}/${m}/${y}`;};
-const isOverdue=(dl,st)=>{
-  if(!dl||st==="concluido")return false;
-  const t=new Date();t.setHours(0,0,0,0);
-  return new Date(dl+"T00:00:00")<t;
-};
-const getPerms=(session,roles)=>{
-  if(session.role==="admin")return SCREENS.map(s=>s.id);
-  const r=roles.find(r=>r.id===session.roleId)||roles.find(r=>r.id==="role-user");
-  return r?r.permissions:["form","mine"];
-};
 
 // ── SHARED COMPONENTS ──────────────────────────────────────
 function Badge({type,label}){return <span className={`badge badge-${type}`}>{label}</span>;}
@@ -673,7 +648,7 @@ function AdminDashboard({tickets,onUpdate}){
       </div>
       {filtered.length===0
         ?<div className="empty-state"><i className="ti ti-inbox"/><p>Nenhum chamado {filter!=="all"?"nesta categoria":"ainda"}</p></div>
-        :<div className="ticket-list">{filtered.map(t=><TicketCard key={t.id} ticket={t} onClick={()=>setSel(t.id)}/>)}</div>}
+        :<div className="ticket-list">{filtered.map((t, index)=><TicketCard key={`${t.id}-${index}`} ticket={t} onClick={()=>setSel(t.id)}/>)}</div>}
       {selT&&<TicketModal ticket={selT} isAdmin={true} onClose={()=>setSel(null)} onSave={u=>{onUpdate(selT.id,u);setSel(null);}}/>}
     </div>
   );
@@ -746,7 +721,7 @@ function MyTickets({tickets,session}){
   return(
     <div>
       {mine.length===0?<div className="empty-state"><i className="ti ti-ticket"/><p>Você ainda não abriu nenhum chamado</p></div>
-        :<div className="ticket-list">{mine.map(t=><TicketCard key={t.id} ticket={t} onClick={()=>setSel(t.id)}/>)}</div>}
+        :<div className="ticket-list">{mine.map((t, index)=><TicketCard key={`${t.id}-${index}`} ticket={t} onClick={()=>setSel(t.id)}/>)}</div>}
       {selT&&<TicketModal ticket={selT} isAdmin={false} onClose={()=>setSel(null)}/>}
     </div>
   );
@@ -965,7 +940,7 @@ function UserManagement({users,roles,currentUser,onApprove,onReject,onPromote,on
         <button className={`tab-btn${tab==="rejected"?" active":""}`} onClick={()=>setTab("rejected")}><i className="ti ti-user-x"/>Recusados</button>
       </div>
       {tab==="pending" &&<List list={pending}        empty="Nenhuma solicitação pendente" showFilter={false}/>}
-      {tab==="active"  &&<List list={filteredActive} empty="Nenhum usuário ativo"          showFilter={true}/>}
+      {tab==="active"  &&<List list={filteredActive} empty="Nenhum usuário ativo"         showFilter={true}/>}
       {tab==="rejected"&&<List list={rejected}       empty="Nenhum usuário recusado"       showFilter={false}/>}
     </div>
   );
@@ -1650,12 +1625,12 @@ function App() {
   const updateTicket = (id, updates) => {
     const ticket = tickets.find(t => t.id === id);
     
-    // 1. Atualiza o estado de forma segura usando uma função de callback (Impede duplicações no React)
+    // Corrige duplicação no React garantindo o state mais atual
     setTickets(currentTickets => 
       currentTickets.map(t => t.id === id ? { ...t, ...updates, updatedAt: Date.now() } : t)
     );
 
-    // 2. Prepara o array atualizado para salvar no banco do Raspberry Pi
+    // Prepara para salvar no DB
     const upForDB = tickets.map(t => t.id === id ? { ...t, ...updates, updatedAt: Date.now() } : t);
     saveToDB({ ti_tickets: upForDB });
 
@@ -1822,6 +1797,5 @@ function App() {
 
 ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
 </script>
-<script type="text/babel" src="js/app.js"></script>
 </body>
 </html>
