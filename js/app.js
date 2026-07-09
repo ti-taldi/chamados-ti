@@ -2,6 +2,12 @@ function App(){
   // Estados iniciais vazios (serão preenchidos pelo banco)
   window.encodePass = p => { try{return btoa(unescape(encodeURIComponent(p)));}catch{return p;} };
   window.decodePass = p => { try{return decodeURIComponent(escape(atob(p)));}catch{return p;} };
+  window.getUserScreens = (session, roles) => {
+  if (!session || !roles) return [];
+  const userRole = roles.find(r => r.id === session.roleId);
+  // Retorna as permissões do cargo, ou o padrão básico se der erro
+  return userRole ? (userRole.permissions || []) : ["form", "mine"];
+};
   const [users,   setUsers]   = React.useState([]);
   const [roles,   setRoles]   = React.useState([]);
   const [tickets, setTickets] = React.useState([]);
